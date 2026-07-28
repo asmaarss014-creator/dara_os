@@ -9,46 +9,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install tools
+      - name: Extract archives
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip tar gzip
+          set +e
 
-      - name: Extract compressed files
-        run: |
-          find . -type f \( \
-            -name "*.zip" -o \
-            -name "*.tar.gz" -o \
-            -name "*.tgz" -o \
-            -name "*.gz" \
-          \) | while read file; do
-
+          find . -type f \
+          \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.tgz" \) \
+          ! -path "./.git/*" | while IFS= read -r file
+          do
             echo "Extracting: $file"
 
-            case "$file" in
-              *.zip)
-                unzip -o "$file" -d "$(dirname "$file")"
-                ;;
+            folder=$(dirname "$file")
 
-              *.tar.gz|*.tgz)
-                tar -xzf "$file" -C "$(dirname "$file")"
-                ;;
+            if [[ "$file" == *.zip ]]; then
+              unzip -o "$file" -d "$folder" || echo "Failed: $file"
 
-              *.gz)
-                gunzip -k "$file"
-                ;;
-            esac
-
+            elif [[ "$file" == *.tar.gz || "$file" == *.tgz ]]; then
+              tar -xzf "$file" -C "$folder" || echo "Failed: $file"
+            fi
           done
-
-      - name: Commit extracted files
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-
-          git add .
-          git commit -m "Auto extract compressed files" || echo "No changes"
-          git push
