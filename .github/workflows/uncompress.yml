@@ -15,20 +15,40 @@ jobs:
       - name: Extract archives
         shell: bash
         run: |
-          set +e
+          set -e
+          shopt -s dotglob nullglob
 
-          find . -type f \
-          \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.tgz" \) \
-          ! -path "./.git/*" | while IFS= read -r file
+          find . -maxdepth 1 -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.tgz" \) | while IFS= read -r file
           do
-            echo "Extracting: $file"
+            echo "Processing: $file"
 
-            folder=$(dirname "$file")
+            # Delete everything except .git and the archive
+            find . -mindepth 1 \
+              ! -path "./.git" \
+              ! -path "./.git/*" \
+              ! -path "$file" \
+              -exec rm -rf {} +
 
             if [[ "$file" == *.zip ]]; then
-              unzip -o "$file" -d "$folder" || echo "Failed: $file"
-
+              unzip -oq "$file" -x ".git/*" ".git"
             elif [[ "$file" == *.tar.gz || "$file" == *.tgz ]]; then
-              tar -xzf "$file" -C "$folder" || echo "Failed: $file"
+              tar --exclude='.git' -xzf "$file"
             fi
+
+            rm -f "$file"
           done
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Auto extract archive"
+          git push
