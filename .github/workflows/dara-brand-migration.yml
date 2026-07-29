@@ -1,4 +1,4 @@
-name: Dara Brand Migration
+name: Lovable To Dara Migration
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   migrate:
-    name: Replace Lovable Branding Safely
+    name: Replace Lovable Branding With Dara
     runs-on: ubuntu-latest
 
     steps:
@@ -19,31 +19,25 @@ jobs:
           fetch-depth: 0
 
 
-      - name: Create backup branch
-        run: |
-          git checkout -b dara-migration-backup
-          git checkout main
-
-
-      - name: Install tools
+      - name: Install required tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ripgrep rename
+          sudo apt-get install -y ripgrep
 
 
-      - name: Scan repository
+      - name: Scan old branding
         run: |
-          echo "Searching Lovable references..."
+          echo "Searching for Lovable references..."
 
           rg -i "lovable" \
           --hidden \
-          --glob '!node_modules/**' \
-          --glob '!.git/**' || true
+          --glob '!.git/**' \
+          --glob '!node_modules/**' || true
 
 
       - name: Replace text references
         run: |
-          echo "Updating text..."
+          echo "Replacing text..."
 
           find . \
           -type f \
@@ -54,117 +48,118 @@ jobs:
           ! -name "*.jpeg" \
           ! -name "*.webp" \
           ! -name "*.gif" \
+          ! -name "*.ico" \
           -exec sed -i \
           -e 's/Lovable/Dara/g' \
           -e 's/lovable/dara/g' \
           -e 's/LOVABLE/DARA/g' \
           {} +
 
-          echo "Text updated."
+          echo "Text replacement finished."
 
 
       - name: Rename files and folders
         run: |
-          echo "Renaming paths..."
+          echo "Renaming files..."
 
           find . \
           -depth \
-          \( -iname "*lovable*" \) \
+          -iname "*lovable*" \
           | while read old
           do
 
-          new=$(echo "$old" | \
-          sed \
-          -e 's/Lovable/Dara/g' \
-          -e 's/lovable/dara/g' \
-          -e 's/LOVABLE/DARA/g')
+            new=$(echo "$old" | \
+            sed \
+            -e 's/Lovable/Dara/g' \
+            -e 's/lovable/dara/g' \
+            -e 's/LOVABLE/DARA/g')
 
-          if [ "$old" != "$new" ]; then
-              echo "$old -> $new"
-              mkdir -p "$(dirname "$new")"
+            if [ "$old" != "$new" ]; then
+              echo "Rename:"
+              echo "$old"
+              echo "to"
+              echo "$new"
+
               mv "$old" "$new"
-          fi
+            fi
 
           done
 
 
-      - name: Fix import paths
-        run: |
-          echo "Checking imports..."
-
-          find . \
-          -type f \
-          ! -path "./.git/*" \
-          ! -path "./node_modules/*" \
-          -exec sed -i \
-          -e 's/Lovable/dara/g' \
-          -e 's/lovable/dara/g' \
-          {} +
-
-
       - name: Validate JSON files
         run: |
-          echo "Checking JSON..."
+          echo "Checking JSON files..."
 
-          python3 <<'PY'
-          import json
-          import os
+          python3 - <<'PY'
+import json
+import os
+import sys
 
-          failed=[]
+errors = []
 
-          for root,dirs,files in os.walk("."):
-              if ".git" in root:
-                  continue
+for root, dirs, files in os.walk("."):
 
-              for file in files:
-                  if file.endswith(".json"):
-                      path=os.path.join(root,file)
+    if ".git" in root or "node_modules" in root:
+        continue
 
-                      try:
-                          with open(path,encoding="utf-8") as f:
-                              json.load(f)
+    for file in files:
 
-                      except Exception:
-                          failed.append(path)
+        if file.endswith(".json"):
 
-          if failed:
-              print("Invalid JSON:")
-              for f in failed:
-                  print(f)
-              exit(1)
+            path = os.path.join(root, file)
 
-          print("JSON OK")
-          PY
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    json.load(f)
+
+            except Exception as e:
+                errors.append(
+                    f"{path}: {e}"
+                )
 
 
-      - name: Search remaining Lovable references
+if errors:
+
+    print("JSON errors found:")
+
+    for error in errors:
+        print(error)
+
+    sys.exit(1)
+
+
+print("All JSON files are valid.")
+PY
+
+
+      - name: Check remaining Lovable references
         run: |
-          echo "Final check..."
+          echo "Final search..."
 
           if rg -i "lovable" \
           --hidden \
-          --glob '!node_modules/**' \
-          --glob '!.git/**'
+          --glob '!.git/**' \
+          --glob '!node_modules/**'
           then
-              echo "Old references still exist."
-              exit 1
+            echo "Old Lovable references still exist."
+            exit 1
           else
-              echo "Migration clean."
+            echo "Migration completed successfully."
           fi
 
 
       - name: Commit changes
         run: |
-          git config user.name "github-actions"
-          git config user.email "41898282+github-actions@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add .
 
           git commit \
-          -m "Complete Lovable to Dara brand migration" \
-          || echo "Nothing to commit"
+          -m "Replace Lovable branding with Dara" \
+          || echo "No changes detected"
 
 
       - name: Push changes
         run: |
-          git push origin main
+          git push
