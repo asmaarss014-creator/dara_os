@@ -1,0 +1,170 @@
+name: Dara Brand Migration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    name: Replace Lovable Branding Safely
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      - name: Create backup branch
+        run: |
+          git checkout -b dara-migration-backup
+          git checkout main
+
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep rename
+
+
+      - name: Scan repository
+        run: |
+          echo "Searching Lovable references..."
+
+          rg -i "lovable" \
+          --hidden \
+          --glob '!node_modules/**' \
+          --glob '!.git/**' || true
+
+
+      - name: Replace text references
+        run: |
+          echo "Updating text..."
+
+          find . \
+          -type f \
+          ! -path "./.git/*" \
+          ! -path "./node_modules/*" \
+          ! -name "*.png" \
+          ! -name "*.jpg" \
+          ! -name "*.jpeg" \
+          ! -name "*.webp" \
+          ! -name "*.gif" \
+          -exec sed -i \
+          -e 's/Lovable/Dara/g' \
+          -e 's/lovable/dara/g' \
+          -e 's/LOVABLE/DARA/g' \
+          {} +
+
+          echo "Text updated."
+
+
+      - name: Rename files and folders
+        run: |
+          echo "Renaming paths..."
+
+          find . \
+          -depth \
+          \( -iname "*lovable*" \) \
+          | while read old
+          do
+
+          new=$(echo "$old" | \
+          sed \
+          -e 's/Lovable/Dara/g' \
+          -e 's/lovable/dara/g' \
+          -e 's/LOVABLE/DARA/g')
+
+          if [ "$old" != "$new" ]; then
+              echo "$old -> $new"
+              mkdir -p "$(dirname "$new")"
+              mv "$old" "$new"
+          fi
+
+          done
+
+
+      - name: Fix import paths
+        run: |
+          echo "Checking imports..."
+
+          find . \
+          -type f \
+          ! -path "./.git/*" \
+          ! -path "./node_modules/*" \
+          -exec sed -i \
+          -e 's/Lovable/dara/g' \
+          -e 's/lovable/dara/g' \
+          {} +
+
+
+      - name: Validate JSON files
+        run: |
+          echo "Checking JSON..."
+
+          python3 <<'PY'
+          import json
+          import os
+
+          failed=[]
+
+          for root,dirs,files in os.walk("."):
+              if ".git" in root:
+                  continue
+
+              for file in files:
+                  if file.endswith(".json"):
+                      path=os.path.join(root,file)
+
+                      try:
+                          with open(path,encoding="utf-8") as f:
+                              json.load(f)
+
+                      except Exception:
+                          failed.append(path)
+
+          if failed:
+              print("Invalid JSON:")
+              for f in failed:
+                  print(f)
+              exit(1)
+
+          print("JSON OK")
+          PY
+
+
+      - name: Search remaining Lovable references
+        run: |
+          echo "Final check..."
+
+          if rg -i "lovable" \
+          --hidden \
+          --glob '!node_modules/**' \
+          --glob '!.git/**'
+          then
+              echo "Old references still exist."
+              exit 1
+          else
+              echo "Migration clean."
+          fi
+
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "41898282+github-actions@users.noreply.github.com"
+
+          git add .
+
+          git commit \
+          -m "Complete Lovable to Dara brand migration" \
+          || echo "Nothing to commit"
+
+
+      - name: Push changes
+        run: |
+          git push origin main
