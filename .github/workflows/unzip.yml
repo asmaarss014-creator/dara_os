@@ -1,0 +1,68 @@
+name: Unzip and Overwrite Files
+
+on:
+  push:
+    branches:
+      - main # Triggers the workflow on push to the main branch
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to push the overwritten files back to the repo
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Unzip File and Overwrite Existing Files
+        env:
+          ZIP_FILE: "archive.zip" # <-- CHANGE THIS to your actual zip file name
+          DEST_DIR: "."           # <-- Destination folder ("." means repository root)
+        run: |
+          # 1. Verify the zip file exists to prevent workflow failure
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "❌ Error: $ZIP_FILE not found in the repository."
+            exit 1
+          fi
+
+          # 2. Ensure the unzip utility is installed (usually pre-installed on ubuntu-latest)
+          if ! command -v unzip &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y unzip
+          fi
+
+          # 3. Create destination directory if it doesn't exist
+          mkdir -p "$DEST_DIR"
+
+          # 4. Unzip the file
+          # -o = Overwrite existing files without prompting (prevents hanging/errors)
+          # -q = Quiet mode (prevents flooding the workflow logs with every file name)
+          echo "📦 Extracting $ZIP_FILE to $DEST_DIR..."
+          unzip -o -q "$ZIP_FILE" -d "$DEST_DIR"
+
+          echo "✅ Unzipping completed successfully!"
+
+      - name: Commit and Push Changes (Bypassing .gitignore)
+        env:
+          DEST_DIR: "." # <-- Must match the destination folder above
+        run: |
+          # Configure Git with the default GitHub Actions bot
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Force add the extracted files.
+          # The -f (force) flag ensures that if the unzipped files match patterns in .gitignore, 
+          # they are still tracked and committed.
+          # The -A (all) flag ensures newly created files and modifications are staged.
+          # Using "$DEST_DIR" instead of "*" ensures hidden files like .gitignore are included.
+          git add -f -A "$DEST_DIR"
+
+          # Check if there are any changes to commit
+          if ! git diff --staged --quiet; then
+            git commit -m "🤖 Auto-unzipped and overwrote files via GitHub Actions"
+            git push
+            echo "✅ Changes pushed to the repository."
+          else
+            echo "ℹ️ No changes to commit (files were already up to date)."
+          fi
