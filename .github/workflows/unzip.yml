@@ -15,7 +15,13 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
+      - name: Debug - List all files
+        run: |
+          echo "Listing all files in the current directory:"
+          ls -la
+          echo "Searching for any hidden or nested zip files:"
+          find . -type f -name "*.zip"
+          
       - name: Find, Unzip, and Overwrite Files
         run: |
           # 1. Automatically find the first .zip file in the repository
